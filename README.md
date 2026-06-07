@@ -2,6 +2,54 @@
 
 A public demo agent for generating, compiling, and executing Hedera Hashgraph workflows. Built with Next.js, this agent accepts natural language requests, produces structured workflow JSON, and enforces human-in-the-loop approval before any on-chain action.
 
+## Live Demo
+
+🌐 **[Open Hedera Agent](https://open-hedera-agent.vercel.app)** — Public demo hosted on Vercel
+
+## Deployment
+
+### Quick Deploy to Vercel
+
+1. Fork this repository
+2. Import to [Vercel](https://vercel.com/new)
+3. Set environment variables:
+   ```
+   DATABASE_URL=file:./dev.db
+   JWT_SECRET=your-secret-key
+   HEDERA_TREASURY_ACCOUNT_ID=0.0.1234567
+   ```
+4. Deploy
+
+### Deploy with Vercel CLI
+
+```bash
+npm i -g vercel
+vercel login
+./deploy.sh          # Preview deployment
+./deploy.sh --prod   # Production deployment
+```
+
+### Deploy to Railway
+
+1. Push code to GitHub
+2. Connect repo to [Railway](https://railway.app)
+3. Add environment variables
+4. Railway auto-detects the `railway.json` config
+
+### Deploy to Render
+
+1. Push code to GitHub
+2. Create a new Web Service on [Render](https://render.com)
+3. Set build command: `npm ci && npx prisma generate && npm run build`
+4. Set start command: `npx prisma migrate deploy && npm start`
+
+### Deploy to Fly.io
+
+```bash
+fly launch
+fly deploy
+```
+
 ## UCP / AP2-Inspired Manifest Endpoints
 
 This project exposes two public, machine-readable manifest endpoints inspired by the [UCP (Universal Consumer Protocol)](https://ucp.sh) and [AP2 (Agent-to-Agent Protocol)](https://github.com/a16z/ap2) specifications. These allow other agents or clients to discover what this agent does and how to interact with it programmatically.
