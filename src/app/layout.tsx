@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { WalletProviderWrapper } from "@/context/WalletContext";
 import Navbar from "@/components/Navbar";
 
 const geistSans = Geist({
@@ -31,8 +32,10 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <Navbar />
-          <main className="flex-1">{children}</main>
+          <WalletProviderWrapper>
+            <Navbar />
+            <main className="flex-1">{children}</main>
+          </WalletProviderWrapper>
         </AuthProvider>
       </body>
     </html>
