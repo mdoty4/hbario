@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "Open Hedera Agent",
+    "version": "0.1.0",
+    "description": "A public demo agent for generating, compiling, and executing Hedera Hashgraph workflows. Accepts natural language requests, produces structured workflow JSON, and enforces human-in-the-loop approval before any on-chain action.",
+    "hosted_url": "http://localhost:3000",
+    "safety_model": "human_approval_required"
+  },
+  "workflows": {
+    "supported_types": [
+      "single_payment",
+      "bulk_payout",
+      "liquidity_path_analysis"
+    ]
+  },
+  "tools": {
+    "supported": [
+      {
+        "name": "validateAccount",
+        "category": "read",
+        "description": "Validate a Hedera account ID format."
+      },
+      {
+        "name": "getAccountBalance",
+        "category": "read",
+        "description": "Get the HBAR balance of a Hedera account."
+      },
+      {
+        "name": "estimateTransferFees",
+        "category": "estimate",
+        "description": "Estimate the network fee for a single HBAR transfer."
+      },
+      {
+        "name": "estimateBulkPayoutFees",
+        "category": "estimate",
+        "description": "Estimate the total network fee for a bulk payout."
+      },
+      {
+        "name": "prepareHbarTransfer",
+        "category": "prepare",
+        "description": "Prepare an HBAR transfer instruction for user approval. Does NOT execute."
+      },
+      {
+        "name": "prepareBulkPayout",
+        "category": "prepare",
+        "description": "Prepare a bulk payout instruction for user approval. Does NOT execute."
+      },
+      {
+        "name": "verifyTransaction",
+        "category": "verify",
+        "description": "Verify a transaction against expected details."
+      },
+      {
+        "name": "getTransactionReceipt",
+        "category": "verify",
+        "description": "Get the receipt for a completed transaction."
+      }
+    ]
+  },
+  "payment": {
+    "currency": "HBAR"
+  },
+  "api": {
+    "endpoints": {
+      "agent_manifest": "/agent.json",
+      "services_manifest": "/api/services",
+      "chat_workflow": "/api/chat/workflow",
+      "workflows_list": "/api/workflows",
+      "workflows_detail": "/api/workflows/[id]",
+      "create_order": "/api/workflows/[id]/create-order",
+      "verify_order": "/api/orders/[id]/verify",
+      "receipt": "/api/receipts/[id]"
+    }
+  }
+}

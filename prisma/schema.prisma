@@ -1,0 +1,134 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum WorkflowStatus {
+  draft
+  awaiting_payment
+  unlocked
+  completed
+  cancelled
+}
+
+enum PaymentStatus {
+  unpaid
+  awaiting_payment
+  paid
+  failed
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workflows     Workflow[]
+  orders        Order[]
+  payments      Payment[]
+  receipts      Receipt[]
+}
+
+model Workflow {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  title         String
+  type          String
+  prompt        String?
+  summary       String?
+  workflowJson  String?        // JSON stored as text
+  status        WorkflowStatus @default(draft)
+  paymentStatus PaymentStatus  @default(unpaid)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  orders        Order[]
+  payments      Payment[]
+  receipts      Receipt[]
+
+  @@index([userId])
+}
+
+model Order {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  workflowId      String
+  workflow        Workflow  @relation(fields: [workflowId], references: [id])
+  amountHbar      Float
+  recipientAccount String
+  memo            String?
+  status          String    @default("pending")
+  transactionId   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  payments        Payment[]
+  receipts        Receipt[]
+
+  @@index([userId])
+  @@index([workflowId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  workflowId      String
+  workflow        Workflow      @relation(fields: [workflowId], references: [id])
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id])
+  payerAccount    String
+  recipientAccount String
+  amountHbar      Float
+  memo            String?
+  transactionId   String?
+  status          PaymentStatus @default(unpaid)
+  verifiedAt      DateTime?
+  createdAt       DateTime      @default(now())
+
+  receipts        Receipt[]
+
+  @@index([userId])
+  @@index([workflowId])
+  @@index([orderId])
+}
+
+model Receipt {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  workflowId       String
+  workflow         Workflow  @relation(fields: [workflowId], references: [id])
+  orderId          String
+  order            Order     @relation(fields: [orderId], references: [id])
+  paymentId        String?
+  payment          Payment?  @relation(fields: [paymentId], references: [id])
+  transactionId    String
+  amountHbar       Float
+  payerAccount     String
+  recipientAccount String
+  memo             String?
+  workflowType     String
+  receiptJson      String?   // JSON stored as text
+  createdAt        DateTime  @default(now())
+
+  @@index([userId])
+  @@index([workflowId])
+  @@index([orderId])
+  @@index([paymentId])
+}
