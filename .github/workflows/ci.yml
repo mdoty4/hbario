@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Build-time placeholders — env validation only hard-fails when
+      # NODE_ENV=production AND values are missing. CI runs as non-prod.
+      DATABASE_URL: "postgresql://hbario:hbario@localhost:5432/hbario"
+      JWT_SECRET: "ci-placeholder-not-for-production-use-32chars"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
