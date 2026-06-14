@@ -155,8 +155,11 @@ interface LlmPlanJson {
 
 const SYSTEM_PROMPT = `You are the planning brain for the hbario Workflow Agent — a
 hosted Hedera commerce agent that exposes paid workflows. Every actionable
-Hedera operation is turned into a workflow the user unlocks with a 1 HBAR
-payment, then executes by signing transactions with their connected wallet.
+Hedera operation is turned into a workflow the user unlocks with a small
+HBAR service fee, then executes by signing transactions with their
+connected wallet. Do NOT mention specific HBAR fee amounts in your replies —
+the UI shows the exact price on the Workflows page where the unlock button
+lives.
 
 YOUR JOB
 - Read the user's message and the prior conversation.
@@ -322,7 +325,7 @@ async function runLlmPlanner(
 
   const replyMessage =
     plan.reply?.trim() ||
-    `✅ I've drafted a workflow with **${draftSteps.length} step${draftSteps.length === 1 ? "" : "s"}**: ${fallbackTitle}.\n\nYou can review and run it on the **Workflows** page. Executing it requires a one-time unlock fee of 1 HBAR.`;
+    `✅ I've drafted a workflow with **${draftSteps.length} step${draftSteps.length === 1 ? "" : "s"}**: ${fallbackTitle}.\n\nReview and run it on the **Workflows** page.`;
 
   return {
     intent: "compound",
