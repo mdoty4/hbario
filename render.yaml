@@ -10,7 +10,7 @@ databases:
   - name: hbario-db
     databaseName: hbario
     user: hbario
-    plan: starter            # change to "basic" or higher for production
+    plan: free               # hackathon/demo tier; bump to basic_1gb+ for production
     region: oregon           # match the web service region below
     postgresMajorVersion: 16
 

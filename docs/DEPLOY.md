@@ -109,12 +109,14 @@ quote → unlock workflow → execute.
 
 ## 6. Going to production-grade
 
-The blueprint defaults to Render's **starter** plans for both the web
-service and the database. For real traffic:
+The blueprint defaults to Render's cheapest plans — **starter** for the
+web service and **free** for Postgres. For real traffic:
 
 - Bump the web service to **standard** (4× the RAM, no cold starts).
-- Bump Postgres to **basic** or higher (the starter free plan expires
-  after 90 days, and has aggressive connection limits).
+- Bump Postgres to **basic_1gb** or higher (the free plan expires after
+  90 days and has aggressive connection limits). Render deprecated the
+  legacy `starter` DB plan in 2026 — `free` and `basic_*` are the
+  current names.
 - Optionally enable **Render Disks** + automated backups on Postgres.
 - Add a **Cloudflare** (or similar) layer in front of Render for DDoS
   protection and edge caching of `/agent.json` and `/api/services`.
