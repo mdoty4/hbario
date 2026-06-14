@@ -8,17 +8,20 @@ export default function Home() {
           hbario
         </p>
         <h1 className="mt-3 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
-          Natural-language payments on Hedera,
-          <br className="hidden sm:block" />
-          payable by humans <span className="text-blue-600">and</span> AI agents.
+          Hedera workflows, on demand.
         </h1>
-        <p className="mt-6 text-lg leading-8 text-gray-600">
-          Tell hbario what to pay — &ldquo;split 1,000 HBAR across these five
-          contractors&rdquo; or &ldquo;send 25 HBAR to 0.0.12345&rdquo; — and it
-          drafts the workflow, your wallet signs it, and every transfer is
-          verified against the Hedera Mirror Node before a receipt is issued.
-          The same service speaks Model Context Protocol with x402-style
-          pay-per-call billing, so other AI agents can hire it programmatically.
+        <p className="mt-4 text-lg font-medium text-gray-700">
+          A payment-gated commerce agent. Pay in HBAR. Get a verified
+          workflow back.
+        </p>
+        <p className="mt-6 text-base leading-7 text-gray-600">
+          Describe the Hedera work you need done — single transfer, bulk
+          payout, account creation, liquidity routing, multi-step compound —
+          and hbario drafts it, gates execution behind an HBAR unlock
+          payment, and runs each step through your wallet. Every transfer
+          is verified on the Hedera Mirror Node before the next one
+          unlocks. Humans use the chat. AI agents use the MCP endpoint and
+          pay per call.
         </p>
 
         <div className="mt-10 flex items-center justify-center gap-x-6">
@@ -39,29 +42,35 @@ export default function Home() {
         <div className="mt-16 grid grid-cols-1 gap-6 text-left sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-white p-5">
             <h3 className="text-sm font-semibold text-gray-900">
-              Plain-English planning
+              One service: Hedera workflow execution
             </h3>
             <p className="mt-2 text-sm text-gray-600">
-              Powered by Hedera Agent Kit in human-in-the-loop mode. Every
-              transaction is reviewed before it&rsquo;s signed.
+              Single payments, bulk payouts, bulk account creation,
+              liquidity-path analysis, and multi-step compound workflows —
+              planned from plain English by Hedera Agent Kit in
+              human-in-the-loop mode.
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5">
             <h3 className="text-sm font-semibold text-gray-900">
-              Never touches your keys
+              Paid in HBAR, gated by Mirror Node verification
             </h3>
             <p className="mt-2 text-sm text-gray-600">
-              HashPack, Blade, Kabila — any HIP-820 wallet via WalletConnect.
-              The server only verifies, read-only, on the Mirror Node.
+              hbario never holds your keys. Your wallet signs every
+              transfer; hbario verifies each one against the Hedera
+              Mirror Node before issuing a receipt and unlocking the next
+              step.
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5">
             <h3 className="text-sm font-semibold text-gray-900">
-              Bills by call, in HBAR
+              Speaks MCP + x402 so AI agents can hire it
             </h3>
             <p className="mt-2 text-sm text-gray-600">
-              Planning costs a few cents of HBAR per chat. Executing costs an
-              unlock fee. No subscriptions, no API key forms.
+              Claude Desktop, Cline, Cursor, or your own agent can list
+              services, get an x402-style 402 payment envelope, settle in
+              HBAR, and consume the workflow — all over Model Context
+              Protocol.
             </p>
           </div>
         </div>

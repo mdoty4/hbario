@@ -1,19 +1,21 @@
 # hbario
 
-> **hbario — natural-language payments on Hedera, payable by humans and AI agents alike.**
+> **Hedera workflows, on demand.** A payment-gated commerce agent built on the
+> [**Hedera Agent Kit**](https://github.com/hashgraph/hedera-agent-kit).
+> Pay it in HBAR. Get a verified Hedera workflow back.
 
-hbario turns plain-English requests like *"split 1,000 HBAR across these five
-contractors"* or *"send 25 HBAR to 0.0.12345 on mainnet"* into signed,
-verified Hedera workflows. A conversational planner (built on the
-[**Hedera Agent Kit**](https://github.com/hashgraph/hedera-agent-kit) in
-human-in-the-loop mode) drafts the transactions, your own wallet
-(HashPack / Blade / Kabila via WalletConnect) signs them, and the
-**Hedera Mirror Node** independently verifies every payment before a
-receipt is issued. The same service is exposed as a
-[**Model Context Protocol (MCP)**](https://modelcontextprotocol.io)
-endpoint with x402-style pay-per-call billing, so other AI agents —
-Claude Desktop, Cline, Cursor, your own — can hire hbario programmatically
-and pay it in HBAR.
+hbario sells **one service** — Hedera workflow execution — billed in HBAR.
+Customers describe what they need ( *"split 1,000 HBAR across these five
+contractors"*, *"create 50 funded accounts for our drop"*, *"send 25 HBAR
+to 0.0.12345 on mainnet"* ), hbario plans the workflow with the Hedera
+Agent Kit, gates execution behind an HBAR unlock payment, runs each step
+through the customer's own wallet (HashPack / Blade / Kabila via
+WalletConnect), and verifies every transfer on the **Hedera Mirror Node**
+before issuing a receipt and unlocking the next step. The same service is
+exposed as a [**Model Context Protocol (MCP)**](https://modelcontextprotocol.io)
+endpoint with x402-style pay-per-call billing, so other AI agents — Claude
+Desktop, Cline, Cursor, your own — can list services, settle in HBAR, and
+consume workflows programmatically.
 
 🌐 **Live:** [hbario.com](https://hbario.com)
 

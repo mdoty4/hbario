@@ -2,7 +2,12 @@
   "app": {
     "name": "hbario",
     "version": "0.2.0",
-    "description": "A payment-gated commerce agent for Hedera: hbario accepts natural-language payment requests, drafts on-chain workflows, gates them behind an HBAR payment, and verifies every transaction on the Hedera Mirror Node — usable from a chat UI or as an MCP service that other AI agents can pay to consume.",
+    "description": "Hedera workflows, on demand. hbario is a payment-gated commerce agent that sells one service — Hedera workflow execution — billed in HBAR. Customers (humans in the chat, AI agents over MCP) describe what they need, hbario plans it with Hedera Agent Kit, gates execution behind an HBAR payment, runs each step through the customer's own wallet, and verifies every transfer on the Hedera Mirror Node before issuing a receipt.",
+    "interop": {
+      "x402_compatible": true,
+      "mcp_protocol_version": "2025-03-26",
+      "notes": "Inspired by AP2, UCP, ACP, and MPP agent-commerce conventions; exposes machine-readable /agent.json + /api/services manifests for indexing."
+    },
     "hosted_url": "https://hbario.com",
     "safety_model": "human_approval_required"
   },

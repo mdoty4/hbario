@@ -20,11 +20,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://hbario.com"),
   title: {
-    default: "hbario — natural-language payments on Hedera",
+    default: "hbario — Hedera workflows, on demand",
     template: "%s · hbario",
   },
   description:
-    "hbario turns plain-English requests into signed, verified Hedera workflows. Conversational HBAR payments for humans, with a built-in MCP endpoint so other AI agents can hire it.",
+    "hbario is a payment-gated Hedera commerce agent. Pay it in HBAR — from the chat as a human or over MCP as an AI agent — and get a verified Hedera workflow back. Built on Hedera Agent Kit; transfers signed by your wallet and verified on the Mirror Node.",
   applicationName: "hbario",
   keywords: [
     "hedera",
@@ -39,15 +39,15 @@ export const metadata: Metadata = {
     type: "website",
     url: "https://hbario.com",
     siteName: "hbario",
-    title: "hbario — natural-language payments on Hedera",
+    title: "hbario — Hedera workflows, on demand",
     description:
-      "Tell hbario what to pay. It plans the workflow, your wallet signs it, and every HBAR transfer is verified against the Hedera Mirror Node. Also speaks Model Context Protocol so other agents can hire it.",
+      "A payment-gated commerce agent. Pay in HBAR. Get a verified Hedera workflow back. Humans use the chat. AI agents hire it over MCP.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "hbario — natural-language payments on Hedera",
+    title: "hbario — Hedera workflows, on demand",
     description:
-      "Conversational HBAR payments on Hedera, payable by humans and AI agents alike.",
+      "Pay in HBAR. Get a verified Hedera workflow back. Humans use the chat. AI agents hire it over MCP.",
   },
   robots: { index: true, follow: true },
 };
