@@ -1,44 +1,59 @@
-# Open Hedera Agent
+# hbario
 
-A payment-gated commerce agent for Hedera, built on **two open Hashgraph stacks at once**:
+> **hbario — natural-language payments on Hedera, payable by humans and AI agents alike.**
 
-- **🤖 [Hedera Agent Kit](https://github.com/hashgraph/hedera-agent-kit)** powers the conversational planner. It runs in
-  `RETURN_BYTES` (human-in-the-loop) mode so every on-chain action is signed by the
-  user's wallet — never the server.
-- **🔌 Hedera Payments MCP** server exposes this agent's workflow-generation
-  service as a Model Context Protocol endpoint. Any MCP-compatible agent
-  (Claude Desktop, Cline, Cursor, custom) can discover, pay, and consume it
+hbario turns plain-English requests like *"split 1,000 HBAR across these five
+contractors"* or *"send 25 HBAR to 0.0.12345 on mainnet"* into signed,
+verified Hedera workflows. A conversational planner (built on the
+[**Hedera Agent Kit**](https://github.com/hashgraph/hedera-agent-kit) in
+human-in-the-loop mode) drafts the transactions, your own wallet
+(HashPack / Blade / Kabila via WalletConnect) signs them, and the
+**Hedera Mirror Node** independently verifies every payment before a
+receipt is issued. The same service is exposed as a
+[**Model Context Protocol (MCP)**](https://modelcontextprotocol.io)
+endpoint with x402-style pay-per-call billing, so other AI agents —
+Claude Desktop, Cline, Cursor, your own — can hire hbario programmatically
+and pay it in HBAR.
+
+🌐 **Live:** [hbario.com](https://hbario.com)
+
+---
+
+## What hbario does
+
+- **Plans HBAR payments from plain English.** Single payments, bulk payouts,
+  bulk account creation, liquidity-path analysis, and multi-step compound
+  workflows.
+- **Never touches your keys.** Every transaction is signed by your wallet
+  over WalletConnect (HIP-820). The server only verifies, read-only, on the
+  Hedera Mirror Node.
+- **Bills by call, in HBAR.** Each chat message is quoted in real time
+  (token-based USD → HBAR via CoinGecko) and paid before the LLM runs.
+  Workflow execution is gated behind a separate HBAR unlock fee.
+- **Speaks MCP.** Your Claude Desktop, Cline, or custom agent can list,
+  price, pay, and consume hbario's tools using the Model Context Protocol
   with an x402-style payment handshake.
 
-The chat UI accepts natural-language requests (e.g. *"Send 25 HBAR to 0.0.123.456"*
-or *"Split 1000 HBAR across these 5 contractors"*), produces structured workflow
-JSON, gates execution behind an HBAR payment, and verifies that payment against
-the **Hedera Mirror Node** before unlocking the workflow.
-
-## Live Demo
-
-🌐 **[Open Hedera Agent](https://open-hedera-agent.vercel.app)** — Public demo hosted on Vercel
-
-## Two ways to use this agent
+## Two ways to use hbario
 
 ### 1. As a human in the chat UI
 
-Open `/chat`, log in, connect a wallet, and tell the agent what to do. The
-agent (powered by [`hedera-agent-kit`](https://github.com/hashgraph/hedera-agent-kit))
-drafts a workflow, you sign the unlock payment in HashPack/Blade/Kabila, and the
-agent verifies it on the Hedera Mirror Node before unlocking.
+Visit [hbario.com](https://hbario.com), register, connect a Hedera wallet
+on the `/chat` page, and tell hbario what to pay. It drafts the workflow,
+your wallet signs the unlock + the actual transfers, and hbario verifies
+each one on the Mirror Node before unlocking the next step.
 
 ### 2. As another agent over MCP
 
-Open `/mcp` to copy your personal endpoint URL + API key, then paste this into
-any MCP client (`claude_desktop_config.json`, Cline `mcpServers`, etc.):
+Open `/mcp` in hbario, copy your personal endpoint URL + API key, then
+paste this into any MCP client:
 
 ```json
 {
   "mcpServers": {
-    "open-hedera-payments": {
+    "hbario": {
       "type": "http",
-      "url": "https://your-deployment.example.com/api/mcp",
+      "url": "https://hbario.com/api/mcp",
       "headers": {
         "Authorization": "Bearer ohp_mcp_YOUR_KEY"
       }
@@ -51,7 +66,7 @@ Your agent will discover six tools at `/api/mcp`:
 
 | Tool | Purpose |
 |---|---|
-| `list_services` | Discover what this agent offers (public). |
+| `list_services` | Discover what hbario offers (public). |
 | `request_workflow` | Natural-language → draft workflow + x402 payment requirement. |
 | `create_payment_order` | Get the HBAR amount, treasury account, memo, network. |
 | `submit_payment` | Pass the signed HBAR tx id → server verifies via Mirror Node → workflow unlocks → receipt issued. |
@@ -61,80 +76,27 @@ Your agent will discover six tools at `/api/mcp`:
 Quick smoke test:
 
 ```bash
-curl -N -X POST https://your-deployment/api/mcp \
+curl -N -X POST https://hbario.com/api/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
 ```
 
+## Public manifests
 
-## Deployment
+Two read-only manifest endpoints help other agents discover hbario:
 
-### Quick Deploy to Vercel
+- `GET /agent.json` — app, workflows, tools, MCP capabilities, safety model.
+- `GET /api/services` — service catalog (id, price, inputs, outputs).
 
-1. Fork this repository
-2. Import to [Vercel](https://vercel.com/new)
-3. Set environment variables:
-   ```
-   DATABASE_URL=file:./dev.db
-   JWT_SECRET=your-secret-key
-   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-reown-project-id
-   NEXT_PUBLIC_DEFAULT_NETWORK=testnet
-   HEDERA_TREASURY_ACCOUNT_ID_TESTNET=0.0.1234567
-   HEDERA_TREASURY_ACCOUNT_ID_MAINNET=0.0.0000000
-   HEDERA_AI_TREASURY_ACCOUNT_ID=0.0.1234567
-   OPENAI_API_KEY=sk-...
-   ```
-4. Deploy
+Both are anonymous; no API key required.
 
+## How payment verification works
 
-## Pay-per-Call AI
-
-The chat planner runs **server-side** using an OpenAI (or Anthropic) key that
-lives only in `OPENAI_API_KEY` on the server. Users **never** paste an API
-key into a form — instead, each chat message:
-
-1. Posts to `POST /api/chat/quote` which:
-   - estimates input/output tokens for the message,
-   - converts the dollar cost to HBAR using a 60s-cached CoinGecko feed,
-   - adds a flat service fee (`AI_SERVICE_FEE_USD`) and a small slippage
-     buffer (`AI_SLIPPAGE_BUFFER`),
-   - creates a `pending` `Order(kind=ai_planning)` and returns the price.
-2. Opens a wallet-signed HBAR transfer to `HEDERA_AI_TREASURY_ACCOUNT_ID`.
-3. Verifies the payment on the Mirror Node (`/api/orders/:id/verify`).
-4. Calls `POST /api/chat/agent` with the paid `orderId`. The server
-   atomically consumes the order (`status: paid → consumed`) so a retry
-   can't double-spend it, runs the LLM with its own key, and persists the
-   resulting workflow.
-
-If the LLM produces an invalid workflow the agent rolls the order back to
-`paid` and the chat UI shows a "Retry (no extra charge)" button.
-
-All AI pricing knobs are configurable via env vars — see `.env.example`.
-
-## Hedera Wallet Setup
-
-
-Open Hedera connects to user wallets via **WalletConnect (HIP-820)**, which
-works with HashPack, Blade, Kabila, and any other compliant Hedera wallet —
-on both testnet and mainnet.
-
-1. Create a free WalletConnect / Reown project at
-   [cloud.reown.com](https://cloud.reown.com) and copy its Project ID.
-2. Put it in `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
-3. Set `NEXT_PUBLIC_DEFAULT_NETWORK` to either `testnet` or `mainnet`. Users
-   can switch at runtime from the `/wallet` page.
-4. Set `HEDERA_TREASURY_ACCOUNT_ID_TESTNET` (and `_MAINNET`) to the accounts
-   that should receive workflow-unlock payments on each network. The
-   server picks the right treasury based on the order's network.
-
-Need test HBAR? Use the [Hedera testnet faucet](https://portal.hedera.com/faucet).
-
-### How payment verification works
-
-When a user signs a workflow-unlock payment in their wallet, the client posts
-the transaction ID to `POST /api/orders/:id/verify`. The server then queries
-the appropriate **Hedera Mirror Node REST API**
+When a user signs a payment (workflow unlock, or a step transfer) in their
+wallet, the client posts the transaction id to
+`POST /api/orders/:id/verify` (or `submit_payment` over MCP). The server
+then queries the appropriate **Hedera Mirror Node REST API**
 (`https://{network}.mirrornode.hedera.com`) to verify:
 
 - the transaction succeeded,
@@ -143,109 +105,72 @@ the appropriate **Hedera Mirror Node REST API**
 - the memo matches the order memo,
 - the payer matches the connected wallet (when provided).
 
-No private keys are ever stored or transmitted by the server. Verification is
-entirely read-only over HTTPS.
+No private keys are ever stored or transmitted by the server. Verification
+is entirely read-only over HTTPS.
 
-### Deploy with Vercel CLI
+## Pay-per-call AI
 
-```bash
-npm i -g vercel
-vercel login
-./deploy.sh          # Preview deployment
-./deploy.sh --prod   # Production deployment
-```
+The chat planner runs **server-side** using an Anthropic (or OpenAI) key
+that lives only in `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` on the server.
+Users **never** paste an API key into a form — instead, each chat message:
 
-### Deploy to Railway
+1. Posts to `POST /api/chat/quote` which estimates tokens, converts the
+   dollar cost to HBAR using a 60s-cached CoinGecko feed, adds a flat
+   service fee and slippage buffer, and creates a `pending` AI-planning
+   order.
+2. Opens a wallet-signed HBAR transfer to the AI treasury account.
+3. Verifies the payment on the Mirror Node (`/api/orders/:id/verify`).
+4. Calls `POST /api/chat/agent` with the paid `orderId`. The server
+   atomically consumes the order so a retry can't double-spend, runs the
+   LLM, and persists the resulting workflow.
 
-1. Push code to GitHub
-2. Connect repo to [Railway](https://railway.app)
-3. Add environment variables
-4. Railway auto-detects the `railway.json` config
+If the LLM produces an invalid workflow the agent rolls the order back to
+`paid` and the chat UI shows a "Retry (no extra charge)" button.
 
-### Deploy to Render
+All AI pricing knobs are configurable via env vars — see
+[`.env.example`](./.env.example).
 
-1. Push code to GitHub
-2. Create a new Web Service on [Render](https://render.com)
-3. Set build command: `npm ci && npx prisma generate && npm run build`
-4. Set start command: `npx prisma migrate deploy && npm start`
+## Deployment
 
-### Deploy to Fly.io
+hbario.com runs on [Render](https://render.com) with managed Postgres. See
+[`docs/DEPLOY.md`](./docs/DEPLOY.md) for the full walkthrough.
 
-```bash
-fly launch
-fly deploy
-```
+The repo also includes a [`render.yaml`](./render.yaml) blueprint — fork
+the repo, open Render → New → Blueprint, point at the fork, and fill in
+secrets in the dashboard.
 
-## UCP / AP2-Inspired Manifest Endpoints
-
-This project exposes two public, machine-readable manifest endpoints inspired by the [UCP (Universal Consumer Protocol)](https://ucp.sh) and [AP2 (Agent-to-Agent Protocol)](https://github.com/a16z/ap2) specifications. These allow other agents or clients to discover what this agent does and how to interact with it programmatically.
-
-### `GET /agent.json`
-
-Returns a static JSON manifest describing the agent itself:
-
-- **App name & version** — identifies the agent
-- **Description** — what the agent does
-- **Hosted URL** — where the agent is running
-- **Supported workflow types** — `single_payment`, `bulk_payout`, `liquidity_path_analysis`
-- **Supported tools** — the full tool registry (read, estimate, prepare, verify)
-- **Payment currency** — `HBAR`
-- **Safety model** — `human_approval_required` (no automatic fund movement)
-- **API endpoints** — map of all available routes
+## Local development
 
 ```bash
-curl https://your-deployment.example.com/agent.json
-```
+# 1. Install deps
+npm install
 
-### `GET /api/services`
+# 2. Start Postgres (or point DATABASE_URL at any Postgres)
+docker compose up -d db
 
-Returns a JSON manifest of the services this agent provides:
+# 3. Set env
+cp .env.example .env
+# Edit .env — minimum: DATABASE_URL, JWT_SECRET, ANTHROPIC_API_KEY,
+# NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID, HEDERA_TREASURY_ACCOUNT_ID_TESTNET,
+# HEDERA_AI_TREASURY_ACCOUNT_ID
 
-- **service_id** — unique identifier (`workflow_generation`)
-- **name** — human-readable service name
-- **price** — cost per invocation (`2 HBAR`)
-- **currency** — payment currency (`HBAR`)
-- **inputs** — what the service accepts (`natural_language_request`)
-- **outputs** — what the service produces (`workflow_json`, `human_summary`, `tool_plan`, `receipt`)
-- **payment_required** — whether payment is needed before execution
+# 4. Run migrations
+npx prisma migrate dev
 
-```bash
-curl https://your-deployment.example.com/api/services
-```
-
-Both endpoints are **public** — no authentication is required.
-
-## Getting Started
-
-First, run the development server:
-
-```bash
+# 5. Start the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Need test HBAR? Use the
+[Hedera testnet faucet](https://portal.hedera.com/faucet).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## License
 
-## Learn More
+[MIT](./LICENSE)
 
-To learn more about Next.js, take a look at the following resources:
+## Security
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [`SECURITY.md`](./SECURITY.md). For sensitive disclosures, please email
+**security@hbario.com** instead of opening a public issue.

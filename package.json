@@ -1,6 +1,8 @@
 {
-  "name": "open_hedera_project",
-  "version": "0.1.0",
+  "name": "hbario",
+  "version": "0.2.0",
+  "description": "hbario — natural-language payments on Hedera, payable by humans and agents alike.",
+  "homepage": "https://hbario.com",
   "private": true,
   "scripts": {
     "dev": "next dev",

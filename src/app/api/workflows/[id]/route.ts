@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
+import { resolveTreasuryAccount } from "@/lib/hedera/treasury";
 
 /**
  * GET /api/workflows/:id
@@ -160,8 +161,7 @@ export async function GET(
             createdAt: r.createdAt,
           };
         }),
-      treasuryAccount:
-        process.env.HEDERA_TREASURY_ACCOUNT_ID || "0.0.1234567",
+      treasuryAccount: resolveTreasuryAccount(),
       unlockPriceHbar: 1,
     };
 

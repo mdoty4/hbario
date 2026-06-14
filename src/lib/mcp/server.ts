@@ -111,7 +111,7 @@ export function buildMcpServer(auth: McpAuthInfo): McpServer {
         prompt: z
           .string()
           .min(1)
-          .describe("Natural-language description of what to do, e.g. 'Send 25 HBAR to 0.0.1234567'."),
+          .describe("Natural-language description of what to do, e.g. 'Send 25 HBAR to 0.0.12345'."),
         network: z
           .enum(["testnet", "mainnet"])
           .optional()
@@ -144,7 +144,7 @@ export function buildMcpServer(auth: McpAuthInfo): McpServer {
         return errorResponse(
           "NO_INTENT_DETECTED",
           agentResult.assistantMessage ||
-            "I couldn't detect a workflow intent in that prompt. Try something like 'Send 10 HBAR to 0.0.1234567'."
+            "I couldn't detect a workflow intent in that prompt. Try something like 'Send 10 HBAR to 0.0.12345'."
         );
       }
 
