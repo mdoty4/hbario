@@ -36,7 +36,7 @@ services:
       - key: NEXT_TELEMETRY_DISABLED
         value: "1"
       - key: MCP_PUBLIC_BASE_URL
-        value: https://hbario.com
+        value: https://hbario.onrender.com
 
       # ─── Generated once at provisioning time ────────────────────────
       # Render fills this in automatically with a strong random value the
