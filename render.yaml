@@ -21,7 +21,7 @@ services:
     plan: starter            # bump to "standard" once you have real traffic
     region: oregon
     branch: main
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && npm start
     healthCheckPath: /agent.json
     autoDeploy: true
