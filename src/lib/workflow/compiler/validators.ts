@@ -30,8 +30,18 @@ export function validateHederaAccount(
     return { valid: false, error: "Account ID cannot be empty." };
   }
 
-  // Accept formats: 0.{shard}.{realm}@{num} or 0.{shard}.{realm}.{num}
-  const pattern = /^0\.\d+\.\d+[@.]\d+$/;
+  // Accept all canonical Hedera account ID forms:
+  //   {shard}.{realm}.{num}            — e.g. 0.0.10583531           (canonical)
+  //   {shard}.{realm}.{num}-{checksum} — e.g. 0.0.10583531-atqqs     (with checksum)
+  //   {shard}.{realm}.{num}@{seconds}  — sometimes used for tx-id-style references
+  //   0.{shard}.{realm}.{num}          — legacy 4-segment form kept for back-compat
+  //
+  // The Hedera spec is {shard}.{realm}.{num}; the previous regex only matched
+  // the rare 4-segment form (0.0.0.X) and rejected the canonical 3-segment
+  // form (0.0.X) that every mainnet account actually uses.
+  const pattern =
+    /^(?:\d+\.\d+\.\d+(?:-[a-z]{5})?|0\.\d+\.\d+[@.]\d+)$/;
+
   if (!pattern.test(trimmed)) {
     return {
       valid: false,

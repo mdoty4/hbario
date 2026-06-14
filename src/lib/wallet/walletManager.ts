@@ -1,97 +1,52 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Wallet Manager
 //
-// Factory that creates the appropriate wallet provider based on configuration.
-// Supports switching between mock and real Hedera testnet wallets.
+// Factory that creates a network-aware Hedera wallet provider using
+// WalletConnect (HashPack, Blade, and other HIP-820 compliant wallets).
 // ──────────────────────────────────────────────────────────────────────────────
 
 import type { WalletProvider, WalletMode } from "./types";
-import { createMockWallet } from "./mockWallet";
+import { createHederaWallet } from "./hederaWallet";
 
-// ── Configuration ─────────────────────────────────────────────────────────────
+const STORAGE_KEY = "openhedera.wallet.network";
+const DEFAULT_NETWORK: WalletMode =
+  (process.env.NEXT_PUBLIC_DEFAULT_NETWORK as WalletMode) === "mainnet"
+    ? "mainnet"
+    : "testnet";
 
 /**
- * Determine the wallet mode from environment.
- * In production, set MOCK_HEDERA=false and configure real wallet credentials.
+ * Read the user's last-selected network from localStorage.
+ * Returns the default network when nothing is stored or we're SSR.
  */
-function getWalletMode(): WalletMode {
-  // On the client side, we read from window; on server side, from process.env
-  if (typeof window !== "undefined") {
-    const envMode = (window as any).__HEDERA_WALLET_MODE__;
-    if (envMode === "real") return "real";
-    return "mock";
+export function getStoredNetwork(): WalletMode {
+  if (typeof window === "undefined") return DEFAULT_NETWORK;
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === "mainnet" || stored === "testnet") return stored;
+  } catch {
+    // ignore (storage disabled / private mode)
   }
-  return process.env.MOCK_HEDERA === "true" ? "mock" : "real";
+  return DEFAULT_NETWORK;
 }
 
-// ── Real Wallet Placeholder ───────────────────────────────────────────────────
-
-/**
- * Real Hedera testnet wallet provider.
- * 
- * This is a placeholder that throws errors until the real Hedera SDK
- * integration is implemented. To enable real wallet mode:
- * 
- * 1. Install @hashgraph/sdk
- * 2. Implement the real wallet methods using the SDK
- * 3. Set MOCK_HEDERA=false in production
- */
-class RealHederaWallet implements WalletProvider {
-  mode = "real" as const;
-  displayName = "Hedera Testnet Wallet";
-
-  private connected: boolean = false;
-
-  async connect(): Promise<boolean> {
-    throw new Error(
-      "Real Hedera wallet integration is not yet implemented. " +
-      "Install @hashgraph/sdk and implement wallet connection. " +
-      "Use mock mode (MOCK_HEDERA=true) for development."
-    );
-  }
-
-  disconnect(): void {
-    this.connected = false;
-  }
-
-  getAccountId(): string | null {
-    throw new Error("Real Hedera wallet integration is not yet implemented.");
-  }
-
-  async requestHbarTransfer(_params: { recipient: string; amount: number; memo?: string }): Promise<{ success: boolean; transactionId?: string; error?: string; isMock: boolean }> {
-    throw new Error("Real Hedera wallet integration is not yet implemented.");
-  }
-
-  getLastTransactionId(): string | null {
-    return null;
-  }
-
-  isConnected(): boolean {
-    return this.connected;
+/** Persist the user's selected network. */
+export function setStoredNetwork(network: WalletMode): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, network);
+  } catch {
+    // ignore
   }
 }
 
-// ── Factory ───────────────────────────────────────────────────────────────────
-
 /**
- * Create a wallet provider based on the current configuration.
- * 
- * @param mode - Override the detected mode (optional).
- * @returns A wallet provider instance.
+ * Create a wallet provider for the requested network.
  */
-export function createWalletProvider(mode?: WalletMode): WalletProvider {
-  const walletMode = mode ?? getWalletMode();
-
-  if (walletMode === "mock") {
-    return createMockWallet();
-  }
-
-  return new RealHederaWallet();
+export function createWalletProvider(network: WalletMode): WalletProvider {
+  return createHederaWallet(network);
 }
 
-/**
- * Get the current wallet mode.
- */
-export function getCurrentWalletMode(): WalletMode {
-  return getWalletMode();
+/** Get the default network from env (used by SSR-safe fallbacks). */
+export function getDefaultNetwork(): WalletMode {
+  return DEFAULT_NETWORK;
 }

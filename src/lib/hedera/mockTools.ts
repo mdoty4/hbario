@@ -11,16 +11,12 @@ import {
   AccountBalance,
   BulkPayoutFeeParams,
   BulkPayoutInstruction,
-  ExpectedTransactionDetails,
   FeeEstimate,
   PrepareBulkPayoutParams,
   PrepareTransferParams,
-  TransactionId,
-  TransactionReceipt,
   TransferFeeParams,
   TransferInstruction,
   ValidateAccountResult,
-  VerificationResult,
   hbarToTinybars,
 } from "./types";
 
@@ -228,59 +224,7 @@ export function mockPrepareBulkPayout(params: PrepareBulkPayoutParams): BulkPayo
 
 // ── Verification Tools ────────────────────────────────────────────────────────
 
-/**
- * Verify a transaction against expected details.
- * In mock mode, accepts any valid mock transaction ID and matches expected details.
- */
-export function mockVerifyTransaction(
-  transactionId: TransactionId,
-  expectedDetails: ExpectedTransactionDetails
-): VerificationResult {
-  // In mock mode, we accept any non-empty transaction ID
-  if (!transactionId || transactionId.trim() === "") {
-    return {
-      verified: false,
-      transactionId,
-      error: "Transaction ID cannot be empty",
-      isMock: true,
-    };
-  }
-
-  // Mock verification: always succeeds if a transaction ID is provided
-  const details: Record<string, string | number | boolean> = {
-    mockMode: true,
-  };
-
-  if (expectedDetails.sender) details.sender = expectedDetails.sender;
-  if (expectedDetails.recipient) details.recipient = expectedDetails.recipient;
-  if (expectedDetails.amountHbar !== undefined) details.amountHbar = expectedDetails.amountHbar;
-
-  return {
-    verified: true,
-    transactionId,
-    details,
-    isMock: true,
-  };
-}
-
-/**
- * Get a transaction receipt.
- * In mock mode, returns a mock receipt with SUCCESS status for any valid transaction ID.
- */
-export function mockGetTransactionReceipt(transactionId: TransactionId): TransactionReceipt {
-  if (!transactionId || transactionId.trim() === "") {
-    return {
-      transactionId,
-      status: "NOT_FOUND",
-      isMock: true,
-    };
-  }
-
-  return {
-    transactionId,
-    status: "SUCCESS",
-    blockHash: `0x${Math.random().toString(16).slice(2, 66)}`,
-    consensusTimestamp: new Date().toISOString(),
-    isMock: true,
-  };
-}
+// NOTE: mockVerifyTransaction and mockGetTransactionReceipt have been removed.
+// Verification now happens for real against the Hedera Mirror Node REST API —
+// see `src/lib/hedera/mirrorNode.ts` and `verifyTransaction` /
+// `getTransactionReceipt` in `src/lib/hedera/tools.ts`.

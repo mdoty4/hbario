@@ -1,10 +1,72 @@
 # Open Hedera Agent
 
-A public demo agent for generating, compiling, and executing Hedera Hashgraph workflows. Built with Next.js, this agent accepts natural language requests, produces structured workflow JSON, and enforces human-in-the-loop approval before any on-chain action.
+A payment-gated commerce agent for Hedera, built on **two open Hashgraph stacks at once**:
+
+- **🤖 [Hedera Agent Kit](https://github.com/hashgraph/hedera-agent-kit)** powers the conversational planner. It runs in
+  `RETURN_BYTES` (human-in-the-loop) mode so every on-chain action is signed by the
+  user's wallet — never the server.
+- **🔌 Hedera Payments MCP** server exposes this agent's workflow-generation
+  service as a Model Context Protocol endpoint. Any MCP-compatible agent
+  (Claude Desktop, Cline, Cursor, custom) can discover, pay, and consume it
+  with an x402-style payment handshake.
+
+The chat UI accepts natural-language requests (e.g. *"Send 25 HBAR to 0.0.123.456"*
+or *"Split 1000 HBAR across these 5 contractors"*), produces structured workflow
+JSON, gates execution behind an HBAR payment, and verifies that payment against
+the **Hedera Mirror Node** before unlocking the workflow.
 
 ## Live Demo
 
 🌐 **[Open Hedera Agent](https://open-hedera-agent.vercel.app)** — Public demo hosted on Vercel
+
+## Two ways to use this agent
+
+### 1. As a human in the chat UI
+
+Open `/chat`, log in, connect a wallet, and tell the agent what to do. The
+agent (powered by [`hedera-agent-kit`](https://github.com/hashgraph/hedera-agent-kit))
+drafts a workflow, you sign the unlock payment in HashPack/Blade/Kabila, and the
+agent verifies it on the Hedera Mirror Node before unlocking.
+
+### 2. As another agent over MCP
+
+Open `/mcp` to copy your personal endpoint URL + API key, then paste this into
+any MCP client (`claude_desktop_config.json`, Cline `mcpServers`, etc.):
+
+```json
+{
+  "mcpServers": {
+    "open-hedera-payments": {
+      "type": "http",
+      "url": "https://your-deployment.example.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ohp_mcp_YOUR_KEY"
+      }
+    }
+  }
+}
+```
+
+Your agent will discover six tools at `/api/mcp`:
+
+| Tool | Purpose |
+|---|---|
+| `list_services` | Discover what this agent offers (public). |
+| `request_workflow` | Natural-language → draft workflow + x402 payment requirement. |
+| `create_payment_order` | Get the HBAR amount, treasury account, memo, network. |
+| `submit_payment` | Pass the signed HBAR tx id → server verifies via Mirror Node → workflow unlocks → receipt issued. |
+| `get_receipt` | Fetch a stored receipt. |
+| `verify_transaction` | Independent read-only verification (public). |
+
+Quick smoke test:
+
+```bash
+curl -N -X POST https://your-deployment/api/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
+```
+
 
 ## Deployment
 
@@ -16,9 +78,73 @@ A public demo agent for generating, compiling, and executing Hedera Hashgraph wo
    ```
    DATABASE_URL=file:./dev.db
    JWT_SECRET=your-secret-key
-   HEDERA_TREASURY_ACCOUNT_ID=0.0.1234567
+   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-reown-project-id
+   NEXT_PUBLIC_DEFAULT_NETWORK=testnet
+   HEDERA_TREASURY_ACCOUNT_ID_TESTNET=0.0.1234567
+   HEDERA_TREASURY_ACCOUNT_ID_MAINNET=0.0.0000000
+   HEDERA_AI_TREASURY_ACCOUNT_ID=0.0.1234567
+   OPENAI_API_KEY=sk-...
    ```
 4. Deploy
+
+
+## Pay-per-Call AI
+
+The chat planner runs **server-side** using an OpenAI (or Anthropic) key that
+lives only in `OPENAI_API_KEY` on the server. Users **never** paste an API
+key into a form — instead, each chat message:
+
+1. Posts to `POST /api/chat/quote` which:
+   - estimates input/output tokens for the message,
+   - converts the dollar cost to HBAR using a 60s-cached CoinGecko feed,
+   - adds a flat service fee (`AI_SERVICE_FEE_USD`) and a small slippage
+     buffer (`AI_SLIPPAGE_BUFFER`),
+   - creates a `pending` `Order(kind=ai_planning)` and returns the price.
+2. Opens a wallet-signed HBAR transfer to `HEDERA_AI_TREASURY_ACCOUNT_ID`.
+3. Verifies the payment on the Mirror Node (`/api/orders/:id/verify`).
+4. Calls `POST /api/chat/agent` with the paid `orderId`. The server
+   atomically consumes the order (`status: paid → consumed`) so a retry
+   can't double-spend it, runs the LLM with its own key, and persists the
+   resulting workflow.
+
+If the LLM produces an invalid workflow the agent rolls the order back to
+`paid` and the chat UI shows a "Retry (no extra charge)" button.
+
+All AI pricing knobs are configurable via env vars — see `.env.example`.
+
+## Hedera Wallet Setup
+
+
+Open Hedera connects to user wallets via **WalletConnect (HIP-820)**, which
+works with HashPack, Blade, Kabila, and any other compliant Hedera wallet —
+on both testnet and mainnet.
+
+1. Create a free WalletConnect / Reown project at
+   [cloud.reown.com](https://cloud.reown.com) and copy its Project ID.
+2. Put it in `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
+3. Set `NEXT_PUBLIC_DEFAULT_NETWORK` to either `testnet` or `mainnet`. Users
+   can switch at runtime from the `/wallet` page.
+4. Set `HEDERA_TREASURY_ACCOUNT_ID_TESTNET` (and `_MAINNET`) to the accounts
+   that should receive workflow-unlock payments on each network. The
+   server picks the right treasury based on the order's network.
+
+Need test HBAR? Use the [Hedera testnet faucet](https://portal.hedera.com/faucet).
+
+### How payment verification works
+
+When a user signs a workflow-unlock payment in their wallet, the client posts
+the transaction ID to `POST /api/orders/:id/verify`. The server then queries
+the appropriate **Hedera Mirror Node REST API**
+(`https://{network}.mirrornode.hedera.com`) to verify:
+
+- the transaction succeeded,
+- the recipient matches the treasury for that order's network,
+- the amount matches the order amount,
+- the memo matches the order memo,
+- the payer matches the connected wallet (when provided).
+
+No private keys are ever stored or transmitted by the server. Verification is
+entirely read-only over HTTPS.
 
 ### Deploy with Vercel CLI
 

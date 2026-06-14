@@ -2,7 +2,13 @@
 // Hedera Tools
 //
 // Public API for all Hedera tool functions.
-// Delegates to mock implementations when MOCK_HEDERA=true.
+//
+// Verification helpers (`verifyTransaction`, `getTransactionReceipt`) hit the
+// Hedera Mirror Node REST API and are network-aware. The other tools
+// (validation, fee estimates, prepare-only instructions) are pure helpers
+// that don't talk to the network — they are intentionally still here so the
+// agent's tool registry keeps working.
+//
 // No private keys, no automatic fund movement.
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -21,108 +27,96 @@ import {
   ValidateAccountResult,
   VerificationResult,
 } from "./types";
-import * as mockTools from "./mockTools";
+import * as helpers from "./mockTools";
+import type { WalletMode } from "@/lib/wallet/types";
+import {
+  fetchReceipt,
+  verifyTransactionOnMirror,
+} from "./mirrorNode";
 
-// ── Configuration ─────────────────────────────────────────────────────────────
+// ── Read / Planning Tools (pure, no network) ──────────────────────────────────
 
-const MOCK_MODE = process.env.MOCK_HEDERA === "true";
-
-// ── Read / Planning Tools ─────────────────────────────────────────────────────
-
-/**
- * Validate a Hedera account ID format.
- */
 export function validateAccount(accountId: string): ValidateAccountResult {
-  if (MOCK_MODE) {
-    return mockTools.mockValidateAccount(accountId);
-  }
-  throw new Error("validateAccount: real Hedera integration not yet implemented");
+  return helpers.mockValidateAccount(accountId);
 }
 
-/**
- * Get the balance of a Hedera account.
- */
 export function getAccountBalance(accountId: string): AccountBalance {
-  if (MOCK_MODE) {
-    return mockTools.mockGetAccountBalance(accountId);
-  }
-  throw new Error("getAccountBalance: real Hedera integration not yet implemented");
+  return helpers.mockGetAccountBalance(accountId);
 }
 
-/**
- * Estimate the fee for a single HBAR transfer.
- */
 export function estimateTransferFees(params: TransferFeeParams): FeeEstimate {
-  if (MOCK_MODE) {
-    return mockTools.mockEstimateTransferFees(params);
-  }
-  throw new Error("estimateTransferFees: real Hedera integration not yet implemented");
+  return helpers.mockEstimateTransferFees(params);
 }
 
-/**
- * Estimate the total fee for a bulk payout.
- */
 export function estimateBulkPayoutFees(params: BulkPayoutFeeParams): FeeEstimate {
-  if (MOCK_MODE) {
-    return mockTools.mockEstimateBulkPayoutFees(params);
-  }
-  throw new Error("estimateBulkPayoutFees: real Hedera integration not yet implemented");
+  return helpers.mockEstimateBulkPayoutFees(params);
 }
 
-// ── Prepare Tools ─────────────────────────────────────────────────────────────
+// ── Prepare Tools (pure, no network) ──────────────────────────────────────────
 
-/**
- * Prepare an HBAR transfer instruction.
- * Does NOT execute the transfer. Returns a structured instruction for user approval.
- */
 export function prepareHbarTransfer(params: PrepareTransferParams): TransferInstruction {
-  if (MOCK_MODE) {
-    return mockTools.mockPrepareHbarTransfer(params);
-  }
-  throw new Error("prepareHbarTransfer: real Hedera integration not yet implemented");
+  return helpers.mockPrepareHbarTransfer(params);
 }
 
-/**
- * Prepare a bulk payout instruction.
- * Does NOT execute the payout. Returns structured instructions for user approval.
- */
 export function prepareBulkPayout(params: PrepareBulkPayoutParams): BulkPayoutInstruction {
-  if (MOCK_MODE) {
-    return mockTools.mockPrepareBulkPayout(params);
-  }
-  throw new Error("prepareBulkPayout: real Hedera integration not yet implemented");
+  return helpers.mockPrepareBulkPayout(params);
 }
 
-// ── Verification Tools ────────────────────────────────────────────────────────
+// ── Verification Tools (hit the Mirror Node) ─────────────────────────────────
 
 /**
- * Verify a transaction against expected details.
+ * Verify a transaction against expected details using the Hedera Mirror Node.
  */
-export function verifyTransaction(
+export async function verifyTransaction(
   transactionId: TransactionId,
-  expectedDetails: ExpectedTransactionDetails
-): VerificationResult {
-  if (MOCK_MODE) {
-    return mockTools.mockVerifyTransaction(transactionId, expectedDetails);
+  expectedDetails: ExpectedTransactionDetails,
+  network: WalletMode
+): Promise<VerificationResult> {
+  if (!expectedDetails.recipient) {
+    return {
+      verified: false,
+      transactionId,
+      error: "Expected recipient is required for verification.",
+      network,
+    };
   }
-  throw new Error("verifyTransaction: real Hedera integration not yet implemented");
+  if (typeof expectedDetails.amountHbar !== "number") {
+    return {
+      verified: false,
+      transactionId,
+      error: "Expected amountHbar is required for verification.",
+      network,
+    };
+  }
+
+  const outcome = await verifyTransactionOnMirror(network, transactionId, {
+    payerAccount: expectedDetails.sender,
+    recipient: expectedDetails.recipient,
+    amountHbar: expectedDetails.amountHbar,
+    memo: expectedDetails.memo,
+  });
+
+  return {
+    verified: outcome.verified,
+    transactionId,
+    details: outcome.details,
+    error: outcome.error,
+    network,
+  };
 }
 
 /**
- * Get a transaction receipt.
+ * Get a transaction receipt from the Hedera Mirror Node.
  */
-export function getTransactionReceipt(transactionId: TransactionId): TransactionReceipt {
-  if (MOCK_MODE) {
-    return mockTools.mockGetTransactionReceipt(transactionId);
-  }
-  throw new Error("getTransactionReceipt: real Hedera integration not yet implemented");
-}
-
-// ── Mode Check ────────────────────────────────────────────────────────────────
-
-/**
- * Check whether the tools are running in mock mode.
- */
-export function isMockMode(): boolean {
-  return MOCK_MODE;
+export async function getTransactionReceipt(
+  transactionId: TransactionId,
+  network: WalletMode
+): Promise<TransactionReceipt> {
+  const receipt = await fetchReceipt(network, transactionId);
+  return {
+    transactionId,
+    status: receipt.status,
+    consensusTimestamp: receipt.consensusTimestamp,
+    network,
+  };
 }

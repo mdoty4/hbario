@@ -2,8 +2,7 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -33,6 +32,11 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   passwordHash  String
+  /// Per-user API key for the Hedera Payments MCP server. Optional —
+  /// generated lazily the first time the user opens the MCP page. External
+  /// agents (Claude Desktop, Cline, etc.) include this in the Authorization
+  /// header to act on this user's behalf when calling our MCP endpoint.
+  mcpApiKey     String?   @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -74,8 +78,25 @@ model Order {
   memo            String?
   status          String    @default("pending")
   transactionId   String?
+  /** Hedera network the order was created on: "testnet" | "mainnet". */
+  network         String    @default("testnet")
+  /**
+   * What this order pays for.
+   *   "workflow_unlock" — legacy 1 HBAR per-workflow unlock fee.
+   *   "ai_planning"     — pays for the LLM call that generates a workflow.
+   */
+  kind            String    @default("workflow_unlock")
+  /** USD value the quote was calculated against (server-side bookkeeping). */
+  quoteUsd        Float?
+  /** HBAR/USD rate snapshot at quote time, for audit + later refund math. */
+  hbarUsdRate     Float?
+  /** When an ai_planning order was redeemed against an LLM call. */
+  consumedAt      DateTime?
+  /** When the quote stops being valid. After this the order is dead. */
+  expiresAt       DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
 
   payments        Payment[]
   receipts        Receipt[]
@@ -125,10 +146,43 @@ model Receipt {
   memo             String?
   workflowType     String
   receiptJson      String?   // JSON stored as text
+  /// For compound workflows, the 0-based index of the step this receipt belongs to.
+  /// NULL on legacy single-step receipts (treated as step 0 implicitly).
+  stepIndex        Int?
+  /// Discriminator for the step kind ("single_payment" | "bulk_payout" | ...),
+  /// duplicated here so the UI can render step rows without re-parsing workflowJson.
+  stepKind         String?
   createdAt        DateTime  @default(now())
 
   @@index([userId])
   @@index([workflowId])
   @@index([orderId])
   @@index([paymentId])
+  @@index([workflowId, stepIndex])
+}
+
+// ─── Global Config & Project Overrides ────────────────────────────────────────
+
+model AppConfig {
+  id        String   @id @default("global")
+  provider  String   @default("custom")
+  apiBase   String   @default("")
+  apiKey    String   @default("")
+  model     String   @default("")
+  maxTokens Int?
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Override fields (null = inherit from AppConfig)
+  provider  String?
+  apiBase   String?
+  apiKey    String?
+  model     String?
+  maxTokens Int?
 }

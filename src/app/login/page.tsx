@@ -1,17 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { useState, useCallback, Suspense } from "react";
+import { useState, useCallback, Suspense, useEffect, useRef } from "react";
 
 function LoginForm() {
-  const { login } = useAuth();
+  const { login, isLoggedIn, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/chat";
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const redirectAttempted = useRef(false);
+
+  // Redirect already-authenticated users - use window.location for reliable cookie handling with middleware
+  useEffect(() => {
+    if (!authLoading && isLoggedIn && !redirectAttempted.current) {
+      redirectAttempted.current = true;
+      window.location.href = callbackUrl;
+    }
+  }, [isLoggedIn, authLoading, callbackUrl]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -23,16 +32,25 @@ function LoginForm() {
       const email = (form.elements.namedItem("email") as HTMLInputElement).value;
       const password = (form.elements.namedItem("password") as HTMLInputElement).value;
 
-      const success = await login(email, password);
+      try {
+        const success = await login(email, password);
 
-      if (success) {
-        router.push(callbackUrl);
-      } else {
-        setError("Invalid email or password");
+        if (success) {
+          // Use window.location.href for full page navigation after login
+          // This ensures the cookie is properly sent to middleware on protected routes
+          redirectAttempted.current = true;
+          window.location.href = callbackUrl;
+        } else {
+          setError("Invalid email or password");
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Login error:", error);
+        setError("Login failed. Please try again.");
         setLoading(false);
       }
     },
-    [login, router, callbackUrl]
+    [login, callbackUrl]
   );
 
   return (

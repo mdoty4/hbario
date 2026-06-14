@@ -17,6 +17,8 @@ import {
 import { SinglePaymentCompiler } from "./compilers/singlePayment";
 import { BulkPayoutCompiler } from "./compilers/bulkPayout";
 import { LiquidityPathAnalysisCompiler } from "./compilers/liquidityPathAnalysis";
+import { BulkAccountCreationCompiler } from "./compilers/bulkAccountCreation";
+import { CompoundCompiler } from "./compilers/compound";
 
 // ── Type Normalization ────────────────────────────────────────────────────────
 
@@ -52,6 +54,23 @@ const TYPE_ALIASES: Record<string, WorkflowType> = {
   "path-analysis": "liquidity_path_analysis",
   "swap_analysis": "liquidity_path_analysis",
   "swap-analysis": "liquidity_path_analysis",
+
+  // Bulk account creation aliases
+  "bulk_account_creation": "bulk_account_creation",
+  "bulk-account-creation": "bulk_account_creation",
+  "create_accounts": "bulk_account_creation",
+  "create-accounts": "bulk_account_creation",
+  "account_creation": "bulk_account_creation",
+  "account-creation": "bulk_account_creation",
+  "bulk_create_accounts": "bulk_account_creation",
+  "bulk-create-accounts": "bulk_account_creation",
+
+  // Compound workflow aliases
+  "compound": "compound",
+  "multi_step": "compound",
+  "multi-step": "compound",
+  "composite": "compound",
+  "plan": "compound",
 };
 
 /**
@@ -86,6 +105,8 @@ function buildCompilerRegistry(): Map<WorkflowType, WorkflowCompiler> {
   registry.set("single_payment", new SinglePaymentCompiler());
   registry.set("bulk_payout", new BulkPayoutCompiler());
   registry.set("liquidity_path_analysis", new LiquidityPathAnalysisCompiler());
+  registry.set("bulk_account_creation", new BulkAccountCreationCompiler());
+  registry.set("compound", new CompoundCompiler());
 
   return registry;
 }
@@ -234,6 +255,9 @@ export {
   type SinglePaymentWorkflowJson,
   type BulkPayoutWorkflowJson,
   type LiquidityPathAnalysisWorkflowJson,
+  type BulkAccountCreationWorkflowJson,
+  type CompoundWorkflowJson,
+  type CompoundStep,
   type WorkflowMetadata,
 } from "./types";
 

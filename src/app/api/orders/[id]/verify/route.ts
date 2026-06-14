@@ -1,37 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
-import { verifyTransaction, getTransactionReceipt, isMockMode } from "@/lib/hedera/tools";
-import type { ExpectedTransactionDetails, TransactionReceipt } from "@/lib/hedera/types";
+import { verifyTransaction, getTransactionReceipt } from "@/lib/hedera/tools";
+import type { ExpectedTransactionDetails } from "@/lib/hedera/types";
+import type { WalletMode } from "@/lib/wallet/types";
+
+function parseNetwork(value: unknown): WalletMode {
+  return value === "mainnet" ? "mainnet" : "testnet";
+}
 
 /**
  * POST /api/orders/:id/verify
  *
- * Verifies an HBAR payment against an order and unlocks the workflow on success.
+ * Verifies an HBAR payment against an order by querying the Hedera Mirror
+ * Node REST API for the order's network, then unlocks the workflow.
  *
  * Request body:
  *  - transactionId (string, required): The Hedera transaction ID to verify
  *  - payerAccount (string, optional): The payer's Hedera account ID
- *
- * Verification checks:
- *  1. Transaction ID exists and is not empty
- *  2. Transaction succeeded (receipt status is SUCCESS)
- *  3. Recipient account matches the treasury account on the order
- *  4. Amount matches the order amount
- *  5. Memo matches the order ID (if memo exists on the order)
- *  6. Payer account matches the connected wallet (if provided)
- *
- * On success:
- *  - Order status -> "paid"
- *  - Payment created/updated with status "paid"
- *  - Workflow paymentStatus -> "paid"
- *  - Workflow status -> "unlocked"
- *  - Receipt created
- *
- * On failure:
- *  - Order status remains "pending"
- *  - Workflow status remains "awaiting_payment"
- *  - Useful error message returned
+ *  - network (string, optional): The Hedera network. Defaults to the order's
+ *    stored network.
  */
 export async function POST(
   request: NextRequest,
@@ -61,9 +49,10 @@ export async function POST(
 
     // ── Parse request body ──────────────────────────────────────────
     const body = await request.json();
-    const { transactionId, payerAccount } = body as {
+    const { transactionId, payerAccount, network: bodyNetwork } = body as {
       transactionId?: string;
       payerAccount?: string;
+      network?: string;
     };
 
     if (!transactionId || transactionId.trim() === "") {
@@ -100,6 +89,24 @@ export async function POST(
       );
     }
 
+    // ── Payer ───────────────────────────────────────────────────────
+    // The connected wallet supplied a `payerAccount` at pay time. We
+    // require it so the mirror-node verification has a sender to pin
+    // against. There's no server-side wallet binding anymore — the
+    // mirror node and the order's recipient/amount/memo are the source
+    // of truth for what "paid" means.
+    if (!payerAccount || !payerAccount.trim()) {
+      return NextResponse.json(
+        {
+          error:
+            "payerAccount is required. Connect a wallet and retry the payment.",
+        },
+        { status: 400 }
+      );
+    }
+    const effectivePayerAccount = payerAccount;
+
+
     // ── Check order is still pending ────────────────────────────────
     if (order.status === "paid") {
       return NextResponse.json(
@@ -108,16 +115,23 @@ export async function POST(
       );
     }
 
-    // ── Get treasury account ────────────────────────────────────────
-    const treasuryAccount =
-      process.env.HEDERA_TREASURY_ACCOUNT_ID || "0.0.1234567";
+    // ── Determine network ───────────────────────────────────────────
+    // Prefer the order's stored network so the client can't trick the server
+    // into looking up the wrong mirror node. Fall back to body for orders
+    // created before the field existed.
+    const network: WalletMode =
+      (order.network as WalletMode | undefined) === "mainnet"
+        ? "mainnet"
+        : order.network === "testnet"
+        ? "testnet"
+        : parseNetwork(bodyNetwork);
 
     // ── Verification Checks ─────────────────────────────────────────
 
-    // Check 2: Transaction succeeded - get receipt
-    let receipt: TransactionReceipt;
+    // Step 1: Receipt check
+    let receipt;
     try {
-      receipt = getTransactionReceipt(transactionId);
+      receipt = await getTransactionReceipt(transactionId, network);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to get transaction receipt";
@@ -130,43 +144,39 @@ export async function POST(
     if (receipt.status !== "SUCCESS") {
       return NextResponse.json(
         {
-          error: "Transaction did not succeed",
+          error:
+            receipt.status === "NOT_FOUND"
+              ? "Transaction has not been indexed by the Hedera Mirror Node yet. Please try again in a few seconds."
+              : "Transaction did not succeed",
           details: {
             transactionId,
             status: receipt.status,
+            network,
           },
         },
         { status: 400 }
       );
     }
 
-    // Check 3: Recipient account matches treasury account
-    if (order.recipientAccount !== treasuryAccount && !isMockMode()) {
-      return NextResponse.json(
-        {
-          error: "Recipient account mismatch",
-          details: {
-            expected: treasuryAccount,
-            actual: order.recipientAccount,
-          },
-        },
-        { status: 400 }
-      );
-    }
-
-    // Check 4 & 5: Amount and memo verification via Hedera tools
+    // Step 2: Full verification (recipient, amount, memo, payer)
     const expectedDetails: ExpectedTransactionDetails = {
       recipient: order.recipientAccount,
       amountHbar: order.amountHbar,
+      memo: order.memo ?? undefined,
     };
 
-    if (payerAccount) {
-      expectedDetails.sender = payerAccount;
-    }
+    // Always pin the expected sender to the bound wallet so a tampered
+    // body can't smuggle through a transaction paid from a different
+    // account.
+    expectedDetails.sender = effectivePayerAccount;
 
     let verificationResult;
     try {
-      verificationResult = verifyTransaction(transactionId, expectedDetails);
+      verificationResult = await verifyTransaction(
+        transactionId,
+        expectedDetails,
+        network
+      );
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Verification failed";
@@ -182,6 +192,7 @@ export async function POST(
           error: "Payment verification failed",
           details: {
             transactionId,
+            network,
             verificationError: verificationResult.error,
             expected: {
               recipient: order.recipientAccount,
@@ -215,7 +226,7 @@ export async function POST(
           status: "paid",
           transactionId,
           verifiedAt: new Date(),
-          payerAccount: payerAccount || payment.payerAccount,
+          payerAccount: effectivePayerAccount,
         },
       });
     } else {
@@ -224,7 +235,7 @@ export async function POST(
           userId: payload.userId,
           workflowId: order.workflowId,
           orderId: order.id,
-          payerAccount: payerAccount || "",
+          payerAccount: effectivePayerAccount,
           recipientAccount: order.recipientAccount,
           amountHbar: order.amountHbar,
           memo: order.memo,
@@ -235,24 +246,27 @@ export async function POST(
       });
     }
 
-    // Update workflow: paymentStatus -> paid, status -> unlocked
+    // Update workflow status.
+    // All web-app orders are AI-planning orders: the LLM hasn't run yet,
+    // so we only flip `paymentStatus` to "paid" here. The /api/chat/agent
+    // route claims the paid order, runs the LLM, and then flips the
+    // workflow to `unlocked` once it has actual content to execute.
     const updatedWorkflow = await prisma.workflow.update({
       where: { id: order.workflowId },
       data: {
         paymentStatus: "paid",
-        status: "unlocked",
       },
     });
+
 
     // Create receipt
     const receiptData = {
       transactionId,
+      network,
       status: receipt.status,
-      blockHash: receipt.blockHash,
       consensusTimestamp: receipt.consensusTimestamp,
       verified: verificationResult.verified,
       verificationDetails: verificationResult.details,
-      isMock: receipt.isMock,
     };
 
     const createdReceipt = await prisma.receipt.create({
@@ -263,7 +277,7 @@ export async function POST(
         paymentId: payment.id,
         transactionId,
         amountHbar: order.amountHbar,
-        payerAccount: payerAccount || payment.payerAccount,
+        payerAccount: effectivePayerAccount,
         recipientAccount: order.recipientAccount,
         memo: order.memo || "",
         workflowType: updatedWorkflow.type,
@@ -274,6 +288,7 @@ export async function POST(
     return NextResponse.json(
       {
         message: "Payment verified successfully",
+        network,
         order: {
           id: updatedOrder.id,
           status: updatedOrder.status,
@@ -296,7 +311,6 @@ export async function POST(
           amountHbar: createdReceipt.amountHbar,
           createdAt: createdReceipt.createdAt,
         },
-        isMock: isMockMode(),
       },
       { status: 200 }
     );

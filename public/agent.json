@@ -1,9 +1,9 @@
 {
   "app": {
-    "name": "Open Hedera Agent",
-    "version": "0.1.0",
-    "description": "A public demo agent for generating, compiling, and executing Hedera Hashgraph workflows. Accepts natural language requests, produces structured workflow JSON, and enforces human-in-the-loop approval before any on-chain action.",
-    "hosted_url": "https://open-hedera-agent.vercel.app",
+    "name": "hbario",
+    "version": "0.2.0",
+    "description": "hbario — agentic payments on Hedera. A payment-gated commerce agent built on the Hedera Agent Kit (LangChain plugins, RETURN_BYTES / human-in-the-loop mode) that exposes its own Hedera Payments MCP server so other agents can hire it programmatically.",
+    "hosted_url": "https://hbario.com",
     "safety_model": "human_approval_required"
   },
   "workflows": {
@@ -12,6 +12,20 @@
       "bulk_payout",
       "liquidity_path_analysis"
     ]
+  },
+  "powered_by": {
+    "agent_kit": {
+      "name": "hedera-agent-kit",
+      "version": "3.8.x",
+      "mode": "RETURN_BYTES",
+      "description": "Used to plan and emit unsigned Hedera transactions which are signed by the user's wallet (WalletConnect / HIP-820). The server never holds private keys."
+    },
+    "payments_mcp": {
+      "name": "hbario-payments-mcp",
+      "version": "0.1.0",
+      "transport": "streamable-http",
+      "endpoint": "/api/mcp"
+    }
   },
   "tools": {
     "supported": [
@@ -57,14 +71,34 @@
       }
     ]
   },
+  "mcp": {
+    "endpoint": "/api/mcp",
+    "transport": "streamable-http",
+    "protocol_version": "2025-03-26",
+    "auth": "bearer-token (per-user API key, see /mcp page)",
+    "tools": [
+      "list_services",
+      "request_workflow",
+      "create_payment_order",
+      "submit_payment",
+      "get_receipt",
+      "verify_transaction"
+    ]
+  },
   "payment": {
-    "currency": "HBAR"
+    "currency": "HBAR",
+    "protocol": "hedera-payments-mcp",
+    "x402_compatible": true,
+    "unlock_price_hbar": 1
   },
   "api": {
     "endpoints": {
       "agent_manifest": "/agent.json",
       "services_manifest": "/api/services",
+      "mcp_endpoint": "/api/mcp",
+      "mcp_key": "/api/mcp/key",
       "chat_workflow": "/api/chat/workflow",
+      "chat_agent": "/api/chat/agent",
       "workflows_list": "/api/workflows",
       "workflows_detail": "/api/workflows/[id]",
       "create_order": "/api/workflows/[id]/create-order",

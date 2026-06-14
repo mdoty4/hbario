@@ -4,6 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { WalletProviderWrapper } from "@/context/WalletContext";
 import Navbar from "@/components/Navbar";
+import { SettingsDrawerProvider } from "@/components/SettingsDrawerContext";
+import SettingsDrawer from "@/components/SettingsDrawer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Open Hedera",
-  description: "Open Hedera dApp platform",
+  title: "hbario",
+  description: "hbario — agentic payments on Hedera",
 };
 
 export default function RootLayout({
@@ -31,12 +33,15 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          <WalletProviderWrapper>
-            <Navbar />
-            <main className="flex-1">{children}</main>
-          </WalletProviderWrapper>
-        </AuthProvider>
+        <SettingsDrawerProvider>
+          <AuthProvider>
+            <WalletProviderWrapper>
+              <Navbar />
+              <main className="flex-1">{children}</main>
+              <SettingsDrawer />
+            </WalletProviderWrapper>
+          </AuthProvider>
+        </SettingsDrawerProvider>
       </body>
     </html>
   );

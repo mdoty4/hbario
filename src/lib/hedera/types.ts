@@ -155,7 +155,12 @@ export interface ExpectedTransactionDetails {
   recipient?: AccountId;
   /** Expected amount in HBAR. */
   amountHbar?: number;
+  /** Expected memo (UTF-8). */
+  memo?: string;
 }
+
+/** Hedera network this verification / receipt was queried against. */
+export type HederaNetwork = "testnet" | "mainnet";
 
 /** Result of a transaction verification. */
 export interface VerificationResult {
@@ -167,8 +172,8 @@ export interface VerificationResult {
   details?: Record<string, string | number | boolean>;
   /** Error message when verification fails. */
   error?: string;
-  /** Whether this was a mock verification. */
-  isMock: boolean;
+  /** The Hedera network the transaction was verified against. */
+  network: HederaNetwork;
 }
 
 /** Result of a transaction receipt lookup. */
@@ -181,8 +186,8 @@ export interface TransactionReceipt {
   blockHash?: string;
   /** Consensus timestamp (ISO string). */
   consensusTimestamp?: string;
-  /** Whether this was a mock receipt. */
-  isMock: boolean;
+  /** The Hedera network the receipt was queried on. */
+  network: HederaNetwork;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

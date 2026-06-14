@@ -2,26 +2,36 @@
 
 import React, {
   createContext,
-  useContext,
-  useState,
   useCallback,
+  useContext,
+  useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import {
   createWalletProvider,
-  getCurrentWalletMode,
+  getDefaultNetwork,
+  getStoredNetwork,
+  setStoredNetwork,
 } from "@/lib/wallet/walletManager";
 import type {
-  WalletProvider,
+  HbarTransferParams,
+  PaymentApprovalPayload,
+  TransferResult,
   WalletConnectionStatus,
   WalletMode,
-  HbarTransferParams,
-  TransferResult,
-  PaymentApprovalPayload,
+  WalletProvider,
 } from "@/lib/wallet/types";
+import { useAuth } from "@/context/AuthContext";
 
-// ── Context Type ──────────────────────────────────────────────────────────────
+// ── Context type ──────────────────────────────────────────────────────────────
+//
+// The wallet is held entirely in-browser per session. There's no server-side
+// "bound wallet" — the only thing that matters is which wallet is connected
+// right now when the user pays. This keeps the UX dead simple: connect in the
+// chat/payment modal, sign, done. When the user logs out (or switches user)
+// we tear down the session so the next person starts fresh.
 
 interface WalletContextType {
   // Connection state
@@ -29,7 +39,7 @@ interface WalletContextType {
   connecting: boolean;
   connectionStatus: WalletConnectionStatus;
   accountId: string | null;
-  walletMode: WalletMode;
+  network: WalletMode;
   walletDisplayName: string;
 
   // Transfer state
@@ -39,11 +49,14 @@ interface WalletContextType {
 
   // Actions
   connectWallet: () => Promise<boolean>;
-  disconnectWallet: () => void;
+  disconnectWallet: () => Promise<void>;
+  setNetwork: (network: WalletMode) => Promise<void>;
   requestHbarTransfer: (params: HbarTransferParams) => Promise<TransferResult>;
+  /** Sign + execute an arbitrary prepared Hedera SDK transaction. */
+  signAndExecuteTransaction: (transaction: unknown) => Promise<TransferResult>;
   clearTransferError: () => void;
 
-  // Payment approval
+  // Payment approval payload (shared across the modal flow)
   paymentPayload: PaymentApprovalPayload | null;
   setPaymentPayload: (payload: PaymentApprovalPayload | null) => void;
 }
@@ -55,7 +68,16 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function WalletProviderWrapper({ children }: { children: ReactNode }) {
+  // Initialize from the env-driven default so the server and the first
+  // client render produce identical markup (avoids hydration mismatches).
+  // The persisted localStorage value is applied in an effect below, after
+  // hydration.
+  const [network, setNetworkState] = useState<WalletMode>(() =>
+    getDefaultNetwork()
+  );
+
   const walletRef = useRef<WalletProvider | null>(null);
+  const [walletDisplayName, setWalletDisplayName] = useState<string>("Wallet");
 
   const [connected, setConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] =
@@ -64,20 +86,52 @@ export function WalletProviderWrapper({ children }: { children: ReactNode }) {
   const [lastTransactionId, setLastTransactionId] = useState<string | null>(null);
   const [transferring, setTransferring] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
-  const [paymentPayload, setPaymentPayload] = useState<PaymentApprovalPayload | null>(null);
+  const [paymentPayload, setPaymentPayload] =
+    useState<PaymentApprovalPayload | null>(null);
 
-  // Initialize wallet provider once
+  // ── Lazy wallet creation per network ──────────────────────────────────
+
   const getWallet = useCallback((): WalletProvider => {
-    if (!walletRef.current) {
-      walletRef.current = createWalletProvider();
+    if (!walletRef.current || walletRef.current.mode !== network) {
+      walletRef.current = createWalletProvider(network);
+      setWalletDisplayName(walletRef.current.displayName);
     }
     return walletRef.current;
+  }, [network]);
+
+  // Apply the user's persisted network choice once on mount.
+  useEffect(() => {
+    const stored = getStoredNetwork();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNetworkState((current) => (stored !== current ? stored : current));
   }, []);
 
-  const walletMode: WalletMode = getCurrentWalletMode();
-  const walletDisplayName = walletRef.current?.displayName ?? "Wallet";
+  useEffect(() => {
+    const wallet = getWallet();
+    setWalletDisplayName(wallet.displayName);
+  }, [getWallet]);
 
   const connecting = connectionStatus === "connecting";
+
+  // ── Disconnect ────────────────────────────────────────────────────────
+
+  const disconnectWallet = useCallback(async (): Promise<void> => {
+    const wallet = walletRef.current;
+    if (wallet) {
+      try {
+        await wallet.disconnect();
+      } catch (err) {
+        console.warn("Disconnect failed:", err);
+      }
+    }
+    walletRef.current = null;
+    setConnected(false);
+    setConnectionStatus("disconnected");
+    setAccountId(null);
+    setLastTransactionId(null);
+    setTransferError(null);
+    setPaymentPayload(null);
+  }, []);
 
   // ── Connect ───────────────────────────────────────────────────────────
 
@@ -88,35 +142,38 @@ export function WalletProviderWrapper({ children }: { children: ReactNode }) {
 
     try {
       const success = await wallet.connect();
-      if (success) {
-        setConnected(true);
-        setConnectionStatus("connected");
-        const id = wallet.getAccountId();
-        setAccountId(id);
-        return true;
-      } else {
-        setConnectionStatus("error");
+      if (!success) {
+        setConnectionStatus("disconnected");
         return false;
       }
-    } catch (error) {
-      console.error("Wallet connection failed:", error);
+
+      const connectedAccountId = wallet.getAccountId();
+      setConnected(true);
+      setConnectionStatus("connected");
+      setAccountId(connectedAccountId);
+      return true;
+    } catch (err) {
+      console.error("Wallet connection failed:", err);
       setConnectionStatus("error");
+      setTransferError(
+        err instanceof Error ? err.message : "Failed to connect wallet"
+      );
       return false;
     }
   }, [getWallet]);
 
-  // ── Disconnect ────────────────────────────────────────────────────────
+  // ── Switch network ────────────────────────────────────────────────────
 
-  const disconnectWallet = useCallback(() => {
-    const wallet = getWallet();
-    wallet.disconnect();
-    setConnected(false);
-    setConnectionStatus("disconnected");
-    setAccountId(null);
-    setLastTransactionId(null);
-    setTransferError(null);
-    setPaymentPayload(null);
-  }, [getWallet]);
+  const setNetwork = useCallback(
+    async (next: WalletMode): Promise<void> => {
+      if (next === network) return;
+      await disconnectWallet();
+      walletRef.current = null;
+      setNetworkState(next);
+      setStoredNetwork(next);
+    },
+    [network, disconnectWallet]
+  );
 
   // ── Transfer ──────────────────────────────────────────────────────────
 
@@ -136,27 +193,69 @@ export function WalletProviderWrapper({ children }: { children: ReactNode }) {
         }
 
         return result;
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Transfer failed";
-        setTransferError(errorMessage);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Transfer failed";
+        setTransferError(message);
         return {
           success: false,
-          error: errorMessage,
-          isMock: wallet.mode === "mock",
+          error: message,
+          network,
         };
       } finally {
         setTransferring(false);
       }
     },
-    [getWallet]
+    [getWallet, network]
   );
 
-  // ── Clear Error ───────────────────────────────────────────────────────
+  const signAndExecuteTransaction = useCallback(
+    async (transaction: unknown): Promise<TransferResult> => {
+      const wallet = getWallet();
+      setTransferring(true);
+      setTransferError(null);
+
+      try {
+        const result = await wallet.signAndExecuteTransaction(transaction);
+        if (result.success && result.transactionId) {
+          setLastTransactionId(result.transactionId);
+        } else if (result.error) {
+          setTransferError(result.error);
+        }
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Transaction failed";
+        setTransferError(message);
+        return {
+          success: false,
+          error: message,
+          network,
+        };
+      } finally {
+        setTransferring(false);
+      }
+    },
+    [getWallet, network]
+  );
 
   const clearTransferError = useCallback(() => {
     setTransferError(null);
   }, []);
+
+  // ── Watch the logged-in user. On user change (including logout), drop
+  //    the in-browser wallet session so the next user starts fresh.
+  const { user } = useAuth();
+  const lastUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    const previousUserId = lastUserIdRef.current;
+    if (currentUserId !== previousUserId) {
+      lastUserIdRef.current = currentUserId;
+      disconnectWallet().catch(() => {
+        /* best effort */
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // ── Value ─────────────────────────────────────────────────────────────
 
@@ -165,14 +264,16 @@ export function WalletProviderWrapper({ children }: { children: ReactNode }) {
     connecting,
     connectionStatus,
     accountId,
-    walletMode,
+    network,
     walletDisplayName,
     lastTransactionId,
     transferring,
     transferError,
     connectWallet,
     disconnectWallet,
+    setNetwork,
     requestHbarTransfer,
+    signAndExecuteTransaction,
     clearTransferError,
     paymentPayload,
     setPaymentPayload,

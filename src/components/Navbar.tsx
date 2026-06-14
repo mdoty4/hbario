@@ -12,7 +12,7 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-xl font-bold text-blue-600">Open Hedera</span>
+            <span className="text-xl font-bold text-blue-600">hbario</span>
           </Link>
 
           {/* Nav Links */}
@@ -35,10 +35,10 @@ export default function Navbar() {
                   Workflows
                 </Link>
                 <Link
-                  href="/wallet"
+                  href="/mcp"
                   className="text-sm font-medium text-gray-700 hover:text-blue-600"
                 >
-                  Wallet
+                  MCP
                 </Link>
                 <button
                   onClick={logout}
