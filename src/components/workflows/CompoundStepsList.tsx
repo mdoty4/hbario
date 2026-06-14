@@ -9,6 +9,7 @@
 "use client";
 
 import { describeCompoundStep } from "@/lib/workflow/clientHelpers";
+import { estimateStepCost } from "@/lib/workflow/execution/preflight";
 
 interface CompoundStepsListProps {
   steps: Array<Record<string, unknown>>;
@@ -90,6 +91,27 @@ export default function CompoundStepsList({
                     {view.subtitle}
                   </div>
                 )}
+                {!compact && (() => {
+                  const cost = estimateStepCost(step);
+                  if (cost.estimatedHbar <= 0) return null;
+                  return (
+                    <div
+                      className="mt-1 text-[11px] text-gray-500"
+                      title={cost.detail}
+                    >
+                      Est. cost ≈ {cost.estimatedHbar.toFixed(4)} HBAR
+                      {cost.outflowHbar > 0 && (
+                        <>
+                          {" "}
+                          <span className="text-gray-400">
+                            ({cost.feeHbar.toFixed(4)} fee +{" "}
+                            {cost.outflowHbar.toFixed(4)} transferred)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               {!compact &&
                 onEditStep &&

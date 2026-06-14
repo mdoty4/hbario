@@ -24,6 +24,10 @@ import { describeCompoundStep } from "@/lib/workflow/clientHelpers";
 import EditAmountsModal, {
   isStepEditable as isStepKindEditable,
 } from "@/components/workflows/EditAmountsModal";
+import {
+  estimateStepCost,
+  fetchWalletHbarBalance,
+} from "@/lib/workflow/execution/preflight";
 
 type StepUiStatus =
   | "pending"
@@ -103,6 +107,19 @@ export default function ExecuteCompoundModal({
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [overallError, setOverallError] = useState<string | null>(null);
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
+  /**
+   * Preflight balance warning state. When set, the user has triggered a
+   * step whose estimated cost exceeds their on-chain HBAR balance. We
+   * surface a warning + an explicit "proceed anyway" button so they
+   * can override (e.g. if their wallet has just received HBAR that the
+   * mirror node hasn't indexed yet).
+   */
+  const [preflightWarning, setPreflightWarning] = useState<{
+    stepIndex: number;
+    requiredHbar: number;
+    balanceHbar: number;
+    detail: string;
+  } | null>(null);
 
   // ── Seed from prior receipts whenever the modal opens ──────────────────
   useEffect(() => {
@@ -232,10 +249,24 @@ export default function ExecuteCompoundModal({
       });
 
       if (result.status === "verified" && result.transactionId) {
-        updateStep(index, {
-          status: "verified",
-          transactionId: result.transactionId,
-          progress: undefined,
+        // IMPORTANT: do NOT clear `progress` here. For bulk_account_creation,
+        // `progress.items` is the ONLY in-memory store of the freshly minted
+        // public/private keys — clearing it would unmount BulkAccountResultsPanel
+        // and the user would lose their one chance to copy/download keys. We
+        // only drop the transient "Awaiting wallet for account N of M…" message.
+        setStepStates((prev) => {
+          const next = [...prev];
+          const prior = next[index] ?? { status: "pending" as StepUiStatus };
+          next[index] = {
+            ...prior,
+            status: "verified",
+            transactionId: result.transactionId,
+            error: undefined,
+            progress: prior.progress
+              ? { ...prior.progress, message: undefined }
+              : undefined,
+          };
+          return next;
         });
         // Server-side mirror verification + Receipt write.
         const expectedRecipient =
@@ -263,10 +294,21 @@ export default function ExecuteCompoundModal({
         return "verified";
       }
 
-      updateStep(index, {
-        status: "failed",
-        error: result.error || "Step failed",
-        progress: undefined,
+      // Same reasoning as the verified branch: preserve `progress.items` so
+      // partial-success bulk_account_creation keeps the keys for any sub-tx
+      // that DID succeed visible to the user.
+      setStepStates((prev) => {
+        const next = [...prev];
+        const prior = next[index] ?? { status: "pending" as StepUiStatus };
+        next[index] = {
+          ...prior,
+          status: "failed",
+          error: result.error || "Step failed",
+          progress: prior.progress
+            ? { ...prior.progress, message: undefined }
+            : undefined,
+        };
+        return next;
       });
       await recordReceipt(index, {
         status: "failed",
@@ -290,11 +332,47 @@ export default function ExecuteCompoundModal({
     ],
   );
 
+  // ── Pre-flight balance check ──────────────────────────────────────────
+  // For steps that the user pays HBAR for (network fees + initial balance
+  // on bulk_account_creation, the transfer amount on transfer-style steps)
+  // we estimate the cost and compare against the wallet's mirror-node
+  // balance. Returns true if execution should proceed, false if we surfaced
+  // a warning the user must explicitly bypass.
+  const preflightOk = useCallback(
+    async (stepIndex: number): Promise<boolean> => {
+      if (!accountId) return true;
+      const step = steps[stepIndex];
+      const cost = estimateStepCost(step);
+      if (cost.estimatedHbar <= 0) return true;
+      const balance = await fetchWalletHbarBalance(network, accountId);
+      // If we can't read the balance (mirror lag, fresh account, network
+      // hiccup) we don't block — we'd rather let the chain reject the tx
+      // than refuse to run on a transient mirror failure.
+      if (balance == null) return true;
+      if (balance >= cost.estimatedHbar) return true;
+      setPreflightWarning({
+        stepIndex,
+        requiredHbar: cost.estimatedHbar,
+        balanceHbar: balance,
+        detail: cost.detail,
+      });
+      return false;
+    },
+    [accountId, network, steps],
+  );
+
   // ── Run one step ───────────────────────────────────────────────────────
-  const handleRunNext = useCallback(async () => {
+  const handleRunNext = useCallback(async (overridePreflight = false) => {
     if (running) return;
     if (!connected || !accountId) return;
     if (activeIndex >= steps.length) return;
+
+    if (!overridePreflight) {
+      const ok = await preflightOk(activeIndex);
+      if (!ok) return;
+    }
+    setPreflightWarning(null);
+
     setRunning(true);
     setOverallError(null);
     try {
@@ -331,7 +409,7 @@ export default function ExecuteCompoundModal({
     } finally {
       setRunning(false);
     }
-  }, [running, connected, accountId, activeIndex, steps.length, runStep, onAllDone]);
+  }, [running, connected, accountId, activeIndex, steps.length, runStep, preflightOk]);
 
   if (!isOpen) return null;
 
@@ -466,6 +544,40 @@ export default function ExecuteCompoundModal({
             </div>
           )}
 
+          {preflightWarning && preflightWarning.stepIndex === activeIndex && (
+            <div className="rounded-md bg-amber-50 px-3 py-2.5 text-sm text-amber-900 border border-amber-300">
+              <div className="font-medium">Balance may be too low for this step</div>
+              <div className="text-xs mt-1">
+                Your wallet has{" "}
+                <strong>{preflightWarning.balanceHbar.toFixed(4)} HBAR</strong>,
+                but this step is estimated to need ~
+                <strong>{preflightWarning.requiredHbar.toFixed(4)} HBAR</strong>{" "}
+                ({preflightWarning.detail}).
+              </div>
+              <div className="text-xs mt-1 text-amber-800">
+                If you proceed and run out of HBAR mid-step, the workflow will
+                stop and you&apos;ll lose the network fees on any partial
+                progress. Fund the wallet first if you can.
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreflightWarning(null)}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRunNext(true)}
+                  className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-500"
+                >
+                  Proceed anyway
+                </button>
+              </div>
+            </div>
+          )}
+
           {overallError && (
             <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 border border-red-200">
               {overallError}
@@ -500,7 +612,7 @@ export default function ExecuteCompoundModal({
           </button>
           {!allVerified && !hasFailure && (
             <button
-              onClick={handleRunNext}
+              onClick={() => handleRunNext()}
               disabled={
                 !connected ||
                 running ||
@@ -697,7 +809,9 @@ function BulkAccountResultsPanel({
   // "done" = the wallet sign succeeded AND we have a keypair to surface.
   // The accountId may still be enriching from mirror — don't require it.
   const doneItems = items.filter((it) => it.status === "done");
+  const failedItems = items.filter((it) => it.status === "failed");
   const allDone = stepStatus === "verified";
+  const hasFailures = failedItems.length > 0;
 
   const toggleRow = (idx: number) =>
     setRevealed((prev) => ({ ...prev, [idx]: !prev[idx] }));
@@ -739,10 +853,22 @@ function BulkAccountResultsPanel({
 
   return (
     <div className="mt-2 space-y-2">
-      <div className="rounded-md border border-gray-200 bg-white">
-        <div className="px-2 py-1.5 border-b border-gray-100 text-[11px] font-medium text-gray-600 flex items-center justify-between">
+      <div
+        className={`rounded-md border bg-white ${
+          hasFailures ? "border-red-200" : "border-gray-200"
+        }`}
+      >
+        <div
+          className={`px-2 py-1.5 border-b text-[11px] font-medium flex items-center justify-between ${
+            hasFailures
+              ? "border-red-100 bg-red-50 text-red-800"
+              : "border-gray-100 text-gray-600"
+          }`}
+        >
           <span>
-            Accounts ({doneItems.length} of {items.length})
+            {hasFailures
+              ? `${doneItems.length} of ${items.length} succeeded · ${failedItems.length} failed`
+              : `Accounts (${doneItems.length} of ${items.length})`}
           </span>
           {doneItems.length > 0 && (
             <button

@@ -207,10 +207,26 @@ export const bulkAccountCreationExecutor: StepExecutor = {
         new Promise<void>((r) => setTimeout(r, 8000)),
       ]);
 
-      // Step status reflects on-chain success, NOT mirror status.
+      // Step status reflects on-chain success, NOT mirror status. ANY sub-tx
+      // failure marks the step `failed` — partial success is not success. The
+      // successful keypairs are still surfaced in payload.accounts so the user
+      // can save the ones that did go through.
       const successCount = items.filter((it) => it.status === "done").length;
+      const failedItems = items.filter((it) => it.status === "failed");
       const overallStatus: "verified" | "failed" =
-        successCount > 0 ? "verified" : "failed";
+        failedItems.length === 0 && successCount === count ? "verified" : "failed";
+
+      let errorSummary: string | undefined;
+      if (overallStatus === "failed") {
+        if (successCount === 0) {
+          errorSummary = `All ${count} account creations failed${
+            failedItems[0]?.error ? `: ${failedItems[0].error}` : ""
+          }`;
+        } else {
+          const firstErr = failedItems[0]?.error ?? "unknown error";
+          errorSummary = `${successCount} of ${count} accounts created — last failure: ${firstErr}`;
+        }
+      }
 
       // Redact privkeys from the server-bound payload. The UI keeps its
       // own copy via the onProgress stream.
@@ -218,10 +234,7 @@ export const bulkAccountCreationExecutor: StepExecutor = {
         status: overallStatus,
         transactionId: txIds[0],
         subTransactionIds: txIds.slice(1),
-        error:
-          overallStatus === "failed"
-            ? `All ${count} account creations failed`
-            : undefined,
+        error: errorSummary,
         payload: {
           createdCount: successCount,
           requested: count,

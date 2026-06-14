@@ -55,6 +55,11 @@ The repo can be public — there are no secrets committed.
    - `HEDERA_TREASURY_ACCOUNT_ID_MAINNET`
    - `HEDERA_AI_TREASURY_ACCOUNT_ID`
    - `ANTHROPIC_API_KEY`
+
+   `NEXT_PUBLIC_DEFAULT_NETWORK` defaults to `mainnet` so first-time
+   visitors land on real HBAR (matching what their HashPack typically
+   has). Override to `testnet` in the dashboard if you want demo-only
+   mode.
 4. **Apply**. Render provisions Postgres first, then builds and starts
    the web service. The build command runs `prisma generate && next build`;
    the start command runs `prisma migrate deploy && next start`, so the

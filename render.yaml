@@ -48,7 +48,7 @@ services:
       - key: NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
         sync: false
       - key: NEXT_PUBLIC_DEFAULT_NETWORK
-        value: testnet         # flip to mainnet when ready
+        value: mainnet         # judges land on mainnet by default; can switch in HashPack
 
       - key: HEDERA_TREASURY_ACCOUNT_ID_TESTNET
         sync: false

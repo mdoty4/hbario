@@ -22,6 +22,11 @@ const nextConfig: NextConfig = {
   // The MCP server route streams Server-Sent Events; don't let any layer
   // upstream of Next buffer responses.
   poweredByHeader: false,
+  // Hide the floating "N" route-status badge Next renders in dev mode. It
+  // overlaps modal corners (notably the bulk-account-creation results
+  // panel) and adds no value during normal development. Compile/runtime
+  // errors are still surfaced as overlays.
+  devIndicators: false,
   async headers() {
     return [
       {
